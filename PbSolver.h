@@ -26,16 +26,48 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "Map.h"
 #include "StackAlloc.h"
 
+#if defined(GLUCOSE3) || defined(GLUCOSE4)
+namespace Minisat = Glucose;
+#endif
+#ifdef GLUCOSE4
+#define rnd_decisions stats[14]
+#define max_literals  stats[21]
+#define tot_literals  stats[22]
+#endif
+
 using Minisat::Var;
 using Minisat::Lit;
 using Minisat::SimpSolver;
 using Minisat::lbool;
 using Minisat::mkLit;
 using Minisat::lit_Undef;
+#ifdef MINISAT
 using Minisat::l_Undef;
 using Minisat::l_True;
 using Minisat::l_False;
 using Minisat::var_Undef;
+#define VAR_UPOL l_Undef
+#define LBOOL    lbool
+#else
+#define VAR_UPOL true
+#define LBOOL
+#endif
+
+#ifdef BIG_WEIGHTS
+using weight_t = Int; 
+#define WEIGHT_MAX Int_MAX
+#else
+using weight_t = int64_t;
+static inline const char *toString(weight_t x) { static char buf[30]; sprintf(buf, "%" PRId64, x); return buf;  }
+#define WEIGHT_MAX std::numeric_limits<weight_t>::max()
+#endif
+
+DefineHash(Lit, return (uint)toInt(key); )
+
+class ExtSimpSolver: public SimpSolver {
+public:
+    void printVarsCls(bool encoding = true, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls = NULL, int soft_cls_sz = 0);
+};
 
 //=================================================================================================
 // Linear -- a class for storing pseudo-boolean constraints:
@@ -76,7 +108,7 @@ public:
 
 class PbSolver {
 public:
-    SimpSolver          sat_solver;     // Underlying SAT solver.
+    ExtSimpSolver       sat_solver;     // Underlying SAT solver.
 protected:
     vec<Lit>            trail;          // Chronological assignment stack.
 
@@ -85,6 +117,9 @@ protected:
 public:
     vec<Linear*>        constrs;        // Vector with all constraints.
     Linear*             goal;           // Non-normalized goal function (used in optimization). NULL means no goal function specified. NOTE! We are always minimizing.
+    Int                 LB_goalvalue, UB_goalvalue;  // Lower and upper bounds on the goal value
+    vec<Minisat::Lit>   base_assump;    // Used to efficiently encode (using sorters) changing goal bounds in binary search 
+
 protected:
     vec<int>            n_occurs;       // Lit -> int: Number of occurrences.
     vec<vec<int> >      occur;          // Lit -> vec<int>: Occur lists. Left empty until 'setupOccurs()' is called.
@@ -99,10 +134,11 @@ protected:
     bool    addUnit  (Lit p) {
         if (value(p) == l_Undef) trail.push(p);
         return sat_solver.addClause(p); }
+public:
     bool    addClause(const vec<Lit>& ps){
         tmp_clause.clear(); for (int i = 0; i < ps.size(); i++) tmp_clause.push(ps[i]);
         return sat_solver.addClause_(tmp_clause); }
-        
+protected:        
     bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
     void    storePb   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
@@ -113,12 +149,16 @@ protected:
 public:
     PbSolver(bool use_preprocessing = false) 
                 : goal(NULL)
+                , LB_goalvalue(Int_MIN)
+                , UB_goalvalue(Int_MAX)
                 , propQ_head(0)
-                  //, stats(sat_solver.stats_ref())
+                //, stats(sat_solver.stats_ref())
                 , declared_n_vars(-1)
                 , declared_n_constrs(-1)
                 , best_goalvalue(Int_MAX)
                 , asynch_interrupt(false)
+                , cpu_interrupt(false)
+                , use_base_assump(false)
                 {
                     // Turn off preprocessing if wanted.
                     if (!use_preprocessing) 
@@ -146,21 +186,21 @@ public:
     vec<cchar*>         index2name;
     vec<bool>           best_model;     // Best model found (size is 'pb_n_vars').
     Int                 best_goalvalue; // Value of goal function for that model (or 'Int_MAX' if no models were found).
-    bool                asynch_interrupt;
+    bool                asynch_interrupt, cpu_interrupt, use_base_assump;
 
     // Problem specification:
     //
-    int     getVar      (cchar* name);
-    void    allocConstrs(int n_vars, int n_constrs);
-    void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
-    bool    addConstr  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
+    int     getVar         (cchar* name);
+    void    allocConstrs   (int n_vars, int n_constrs);
+    void    addGoal        (const vec<Lit>& ps, const vec<Int>& Cs);
+    bool    addConstr      (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
 
     // Solve:
     //
     bool    okay(void) { return sat_solver.okay(); }
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
-    void    solve(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
+    void    solve(solve_Command cmd = sc_Minimize);        // Returns best/first solution found or Int_MAX if UNSAT.
 };
 
 

@@ -15,12 +15,12 @@ all:	r lr lsh
 BUILD_DIR      ?= build
 
 # Include debug-symbols in release builds
-MINISATP_RELSYM ?= -g
+MINISATP_RELSYM ?=
 
 # Sets of compile flags for different build types
-MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
-MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing
-MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
+MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS -D BIG_WEIGHTS
+MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D COMINISATPS -D BIG_WEIGHTS
+MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS -D BIG_WEIGHTS
 MINISATP_FPIC   ?= -fpic
 
 # GNU Standard Install Variables
@@ -32,8 +32,8 @@ datarootdir ?= $(prefix)/share
 mandir      ?= $(datarootdir)/man
 
 # Dependencies
-MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat
-MINISAT_LIB    ?=-L$(libdir) -lminisat
+MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat -I../cominisatps
+MINISAT_LIB    ?=-L$(libdir) -L../cominisatps/simp -l_release
 
 ## Write Configuration  ###########################################################################
 

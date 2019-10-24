@@ -51,7 +51,7 @@ extern bool     opt_shared_fmls;
 extern int      opt_base_max;
 extern int      opt_minimization;
 extern int      opt_seq_thres;
-extern int      opt_bin_coeff;
+extern int      opt_bin_percent;
 
 // -- files:
 extern char*    opt_input;

@@ -26,7 +26,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 
 #include <unistd.h>
 #include <signal.h>
-#include "minisat/utils/System.h"
+#include "System.h"
 #include "PbSolver.h"
 #include "PbParser.h"
 
@@ -61,7 +61,7 @@ int      opt_mem_lim       = INT32_MAX;
 
 int      opt_minimization  = 2; // 0 = sequential. 1 = alternating, 2 - binary
 int      opt_seq_thres     = 96;
-int      opt_bin_coeff    = 3;
+int      opt_bin_percent   = 65;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -174,6 +174,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-goal="     ,   6) == 0) opt_goal       = atoi(arg+ 6);  // <<== real bignum parsing here
             else if (strncmp(arg, "-cnf="      ,   5) == 0) opt_cnf        = arg + 5;
             else if (strncmp(arg, "-base-max=",   10) == 0) opt_base_max   = atoi(arg+10); 
+            else if (strncmp(arg, "-bin-split=",  11) == 0) opt_bin_percent= atoi(arg+11);
             //(end)
 
             else if (oneof(arg, "1,first"   )) opt_command = cmd_FirstSolution;
@@ -233,6 +234,7 @@ void reportf(const char* format, ...)
     char* text = vnsprintf(format, args);
     va_end(args);
 
+    if (col0 && text[0] == '\n' && !text[1]) { fflush(stdout); return; }
     for(char* p = text; *p != 0; p++){
         if (col0 && opt_satlive)
             putchar('c'), putchar(' ');
@@ -355,14 +357,14 @@ int main(int argc, char** argv)
     if (opt_cpu_lim != INT32_MAX) {
         reportf("Setting cpu limit to %ds.\n",opt_cpu_lim);
         signal(SIGXCPU, SIGTERM_handler); 
-        Minisat::limitTime(opt_cpu_lim);
+        limitTime(opt_cpu_lim);
     }
     if (opt_mem_lim != INT32_MAX) {
         reportf("Setting memory limit to %dMB.\n",opt_mem_lim);
         signal(SIGSEGV, SIGTERM_handler); 
         signal(ENOMEM, SIGTERM_handler); 
         signal(SIGABRT, SIGTERM_handler);
-        Minisat::limitMemory(opt_mem_lim);
+        limitMemory(opt_mem_lim);
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");

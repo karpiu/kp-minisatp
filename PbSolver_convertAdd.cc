@@ -72,10 +72,12 @@ void linearAddition(const Linear& l, vec<Formula>& out)
     FEnv::push(); // M.Piotrow 5.10.2017
 
     addPb(inp,cs,sum,bits);
-    if (opt_verbosity >= 1){
-        char* tmp = toString(maxlim);
-        reportf("Adder-cost: %d   maxlim: %s   bits: %d/%d\n", FEnv::nodes.size() - nodes, tmp, sum.size(), bits);
-        xfree(tmp); }
+    if (opt_verbosity >= 1 && opt_minimization != 1 || opt_verbosity >= 2)
+        if (FEnv::nodes.size() > nodes) {
+            char* tmp = toString(maxlim);
+            reportf("Adder-cost: %5d   maxlim: %s   bits: %d/%d\n", FEnv::nodes.size() - nodes, tmp, sum.size(), bits);
+            xfree(tmp);
+         } else reportf("\n");
 
     Formula f = _1_;
     if (l.lo != Int_MIN){
@@ -88,6 +90,6 @@ void linearAddition(const Linear& l, vec<Formula>& out)
         bitAdder(l.hi,_1_,inp);
         f &= lte(sum,inp);
     }
-
-    out.push( l.lit==lit_Undef ? f : ~lit2fml(l.lit) | f );
+    extern PbSolver *pb_solver;
+    out.push( l.lit==lit_Undef || pb_solver->use_base_assump ? f : ~lit2fml(l.lit) | f );
 }

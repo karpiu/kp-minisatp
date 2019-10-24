@@ -44,7 +44,7 @@ bool PbSolver::convertPbs(bool first_call)
         if (constrs[i] == NULL) continue;
         Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
 
-        if (opt_verbosity >= 1) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i);
+        if (opt_verbosity >= 1 && first_call) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i);
     
         try { // M. Piotrow 11.10.2017
             if (opt_convert == ct_Sorters)

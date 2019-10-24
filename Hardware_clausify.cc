@@ -113,7 +113,10 @@ Lit Clausifier::polarityClausify(Formula f)
     }else if (vmapp.at(f) != lit_Undef && !s.isEliminated(var(vmapp.at(f)))){
         result = vmapp.at(f);
     }else{
-#if 1
+#ifdef MINISAT
+        result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
+            mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
+#elif 1
         result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
             mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(true /*l_Undef*/, !opt_branch_pbvars));
 #else
@@ -242,7 +245,11 @@ Lit Clausifier::basicClausify(Formula f)
     }else if (vmap.at(f) != var_Undef && !s.isEliminated(vmap.at(f))){
         result = vmap.at(f);
     }else{
+#ifdef MINISAT
+        result = s.newVar(l_Undef, !opt_branch_pbvars);
+#else
         result = s.newVar(true /*l_Undef*/, !opt_branch_pbvars);
+#endif
         Lit p  = mkLit(result);
         if (Bin_p(f)){
 
@@ -356,6 +363,10 @@ void clausify(SimpSolver& s, const vec<Formula>& fs)
 {
     Minisat::vec<Lit>  out;
     clausify(s, fs, out);
-    for (int i = 0; i < out.size(); i++)
-        s.addClause(out[i]);
+    extern PbSolver *pb_solver;
+    if (pb_solver->use_base_assump && out.size() == 1)
+        pb_solver->base_assump.push(out[0]);
+    else
+        for (int i = 0; i < out.size(); i++)
+            s.addClause(out[i]);
 }
