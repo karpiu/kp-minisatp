@@ -80,6 +80,10 @@ bool PbSolver::convertPbs(bool first_call)
                     else converted_constrs.push(result);
                 }
             } else assert(false);
+            constrs[i]->~Linear(); constrs[i] = NULL;
+            if (!opt_shared_fmls && FEnv::nodes.size() >= 100000) { 
+                clausify(sat_solver, converted_constrs); converted_constrs.clear(); 
+            }
             opt_convert = saved_opt_convert;
         } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
 	    FEnv::pop(); i-=1;
@@ -92,19 +96,13 @@ bool PbSolver::convertPbs(bool first_call)
         }
         if (!okay()) return false;
     }
-
-    // NOTE: probably still leaks memory (if there are constraints that are NULL'ed elsewhere)
-    for (int i = 0; i < constrs.size(); i++)
-      if (constrs[i] != NULL)
-        constrs[i]->~Linear();
-
     constrs.clear();
     mem.clear();
 
     try { // M. Piotrow 15.06.2018
       clausify(sat_solver, converted_constrs);
     } catch (std::bad_alloc& ba) { // M. Piotrow 15.06.2018
-      reportf("Out of memery in converting constraints: %s\n",ba.what());
+      reportf("Out of memery in clausifying constraints: %s\n",ba.what());
       exit(1);
     }
     

@@ -592,17 +592,31 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_minimization != 0 && goal != NULL && opt_goal == Int_MAX) {
         assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
         try_lessthan = (UB_goalvalue + LB_goalvalue)/2;
-        if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))  assump_ps.push(assump_lit), convertPbs(false);
+        if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit)) {
+            convertPbs(false);
+            if (use_base_assump && base_assump.size() > 0 && var(base_assump.last()) >= pb_n_vars) { 
+                sat_solver.setFrozen(var(base_assump.last()), true);
+                base_assump.clear();
+                assump_lit = lit_Undef;
+            } else assump_ps.push(assump_lit);
+        }
+
     }
     if (opt_verbosity >= 1)
         sat_solver.printVarsCls();
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
-      lbool status = // base_assump.size() > 0 && base_assump[0] == assump_lit ? l_True :
-          base_assump.size() > 0 && base_assump[0] == ~assump_lit ? l_False :
+      lbool status = 
+          base_assump.size() == 1 && base_assump[0] == assump_lit  ? l_True :
+          base_assump.size() == 1 && base_assump[0] == ~assump_lit ? l_False :
           sat_solver.solveLimited(assump_ps);
       if (use_base_assump) {
-          for (int i = 0; i < base_assump.size(); i++) assump_ps.pop();
+          for (int i = 0; i < base_assump.size(); i++) {
+              if (status == l_True && var(base_assump[i]) < pb_n_vars) addUnit(base_assump[i]);
+              assump_ps.pop();
+          }
+          if (status == l_True && assump_lit != lit_Undef && base_assump.size() > 0 && var(base_assump.last()) >= pb_n_vars)
+              addUnit(base_assump.last());
           base_assump.clear();
       }
       if (status  == l_Undef) {

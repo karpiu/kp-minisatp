@@ -339,7 +339,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static vec<Int>        Cs;
     static Int lo = Int_MIN, hi = Int_MAX;
     static int lastCost = 0;
-    static bool negate = true; //false;
+    //static bool negate = true; //false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
     bool lastBaseOK = sizesDiff >= 0;    
@@ -352,8 +352,9 @@ Formula buildConstraint(const Linear& c, int max_cost)
         if (i == Cs.size() || c(j) < Cs[i]) lastBaseOK = false; else i++;
     }
     bool lastEncodingOK = lastBaseOK && opt_shared_fmls && FEnv::stack.size() > 0;
-    Int sumAssigned = 0, sumSetToTrue = 0;
+    Int sumAssigned = 0, sumSetToTrue = 0, sumSkipped = 0;
     extern PbSolver *pb_solver;
+    bool negate = pb_solver->use_base_assump; 
     int j = 0;
     for (int i = 0; lastEncodingOK && i < ps.size(); i++) {
         Lit   psi_lit = mkLit(index(ps[i]),sign(ps[i]));
@@ -364,6 +365,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
             sumAssigned += Cs[i];
         }
         else if (j < c.size) lastEncodingOK = false;
+        else sumSkipped += Cs[i];
     }
     if (j < c.size) lastEncodingOK = false;
     //negate = (c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK) 
@@ -371,33 +373,32 @@ Formula buildConstraint(const Linear& c, int max_cost)
         lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi;
         hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
     } else lo = c.lo, hi = c.hi;
+    int      cost;
+    static vec<int> base;
+    static vec<Formula> base_assump;
     if (!lastEncodingOK) {
-        ps.clear(), Cs.clear();
+        ps.clear(), Cs.clear(); base_assump.clear();
         for (int j = 0; j < c.size; j++)
 	    ps.push(negate ? neg(lit2fml(c[j])) : lit2fml(c[j])),
             Cs.push(c(j));
     } else {
-        sum += sumAssigned;
-        if (lo != Int_MIN) lo += sumSetToTrue;
+        sum += sumAssigned + sumSkipped;
+        if (lo != Int_MIN) lo += sumSetToTrue + sumSkipped;
         if (hi != Int_MAX) hi += sumSetToTrue;
     }
-    int      cost;
-    static vec<int> base;
-    static vec<Formula> base_assump;
     if (!lastBaseOK || !lastEncodingOK && sizesDiff > 0 && 
                                       (base.size() <= 8 || sizesDiff * 8 > c.size)) {
         optimizeBase(Cs, cost, base);
-        base_assump.clear();
         /**/pf("cost=%d, base.size=%d\n", cost, base.size());
     } else if (sizesDiff == 0 && lastRet == _undef_ && lastCost > max_cost) return _undef_;
-    else { // if (!pb_solver->use_base_assump) {
+    else if (!pb_solver->use_base_assump) {
         Int B = 1;
         for (int i = 0; i < base.size(); i++)
             if ((B *= (Int)base[i]) > sum) { base.shrink(base.size() - i); break; }
     }
     FEnv::push();
     if (pb_solver->use_base_assump) {
-        if (base.size() == 0 || lo != Int_MIN && hi != Int_MAX) { base_assump.clear(); pb_solver->use_base_assump = false; }
+        if (base.size() == 0 || lo != Int_MIN && hi != Int_MAX) base_assump.clear();
         else if (base_assump.size() == 0) {
             for (int i = 0; i < base.size(); i++) {
                 Lit prev_p = lit_Undef;
