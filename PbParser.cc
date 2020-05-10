@@ -159,10 +159,12 @@ void parseExpr(B& in, S& solver, vec<Lit>& out_ps, vec<Int>& out_Cs, vec<char>& 
     // 'tmp' is a tempory, passed to avoid frequent memory reallocation.
 {
     bool empty = true;
+    static Int max_smallnum = Int((1<<21) - 1), min_smallnum = -max_smallnum; 
     for(;;){
         skipWhitespace(in);
         if ((*in < '0' || *in > '9') && *in != '+' && *in != '-') break;
         out_Cs.push(parseInt(in));
+        if (out_Cs.last() > max_smallnum || out_Cs.last() < min_smallnum) solver.bignum_instance = true;
         skipWhitespace(in);
         if (old_format){
             if (*in != '*') throw xstrdup("Missing '*' after coefficient.");

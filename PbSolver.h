@@ -159,6 +159,7 @@ public:
                 , asynch_interrupt(false)
                 , cpu_interrupt(false)
                 , use_base_assump(false)
+                , bignum_instance(false)
                 {
                     // Turn off preprocessing if wanted.
                     if (!use_preprocessing) 
@@ -190,6 +191,7 @@ public:
 
     // Problem specification:
     //
+    bool    bignum_instance;
     int     getVar         (cchar* name);
     void    allocConstrs   (int n_vars, int n_constrs);
     void    addGoal        (const vec<Lit>& ps, const vec<Int>& Cs);

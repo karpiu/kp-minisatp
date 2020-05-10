@@ -246,7 +246,7 @@ void PbSolver::storePb(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, L
     for (int i = 0; i < ps.size(); i++)
         if (toInt(ps[i]) < n_occurs.size()) n_occurs[toInt(ps[i])]++;
 
-    if (lit!=lit_Undef && n_occurs.size() > toInt(lit))
+    if (lit != lit_Undef && lit != Minisat::lit_Error && n_occurs.size() > toInt(lit))
         n_occurs[toInt(lit)]++;
 
     constrs.push(new (mem.alloc(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, lo, hi, lit));
@@ -560,7 +560,7 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_convert_goal != ct_Undef)
         opt_convert = opt_convert_goal;
     opt_sort_thres *= opt_goal_bias;
-    opt_shared_fmls = use_base_assump = true;
+    opt_shared_fmls = true; use_base_assump = true;
 
     if (opt_goal != Int_MAX)
         addConstr(goal_ps, goal_Cs, opt_goal, -1, lit_Undef),
@@ -590,15 +590,17 @@ void PbSolver::solve(solve_Command cmd)
 	    } else if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
             else UB_goalvalue += goal_Cs[i];
     if (opt_minimization != 0 && goal != NULL && opt_goal == Int_MAX) {
-        assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
+        assump_lit = (use_base_assump ? Minisat::lit_Error : 
+                                        mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars)));
         try_lessthan = (UB_goalvalue + LB_goalvalue)/2;
         if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit)) {
             convertPbs(false);
-            if (use_base_assump && base_assump.size() > 0 && var(base_assump.last()) >= pb_n_vars) { 
+            /*if (use_base_assump && base_assump.size() > 0 && var(base_assump.last()) >= pb_n_vars)
                 sat_solver.setFrozen(var(base_assump.last()), true);
                 base_assump.clear();
-                assump_lit = lit_Undef;
-            } else assump_ps.push(assump_lit);
+                assump_lit = lit_Undef;*/
+            if (assump_lit != lit_Undef && assump_lit != Minisat::lit_Error)
+                assump_ps.push(assump_lit);
         }
 
     }
@@ -607,8 +609,8 @@ void PbSolver::solve(solve_Command cmd)
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
       lbool status = 
-          base_assump.size() == 1 && base_assump[0] == assump_lit  ? l_True :
-          base_assump.size() == 1 && base_assump[0] == ~assump_lit ? l_False :
+          base_assump.size() == 1 && base_assump[0] == assump_lit  ? base_assump.clear(), l_True :
+          base_assump.size() == 1 && base_assump[0] == ~assump_lit ? base_assump.clear(), l_False :
           sat_solver.solveLimited(assump_ps);
       if (use_base_assump) {
           for (int i = 0; i < base_assump.size(); i++) {
@@ -624,7 +626,7 @@ void PbSolver::solve(solve_Command cmd)
       } else if (status == l_True) { // SAT returned
         if(assump_ps.size() > 0) {
           assert(assump_ps.size() == 1);
-          addUnit(assump_ps[0]);
+          if (!use_base_assump) addUnit(assump_ps[0]);
         }
         assump_ps.clear();
         sat = true;
@@ -641,6 +643,7 @@ void PbSolver::solve(solve_Command cmd)
             }
             reportf("\n");
             sat_solver.addClause_(ban);
+            continue;
         }else{
             vec<bool> model;
             for (Var x = 0; x < pb_n_vars; x++)
@@ -672,37 +675,36 @@ void PbSolver::solve(solve_Command cmd)
                 assump_lit = lit_Undef;
                 try_lessthan = best_goalvalue;
             } else {
-                assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
+                assump_lit = (use_base_assump ? Minisat::lit_Error : 
+                        mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars)));
                 try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
             }
-            if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
-                break; // unsat
-            if (assump_lit != lit_Undef) assump_ps.push(assump_lit);
-            convertPbs(false);
         }
       } else { // UNSAT returned
 
-        if (assump_ps.size() == 0) break;
+        if (assump_ps.size() == 0 && assump_lit == lit_Undef) break;
 
-        assert(assump_ps.size() == 1);
-        addUnit(~(assump_ps[0]));
+        assert(assump_ps.size() == 1 || use_base_assump);
+        if (!use_base_assump) addUnit(~(assump_ps[0]));
         assump_ps.clear();
         LB_goalvalue = try_lessthan;
+
+        if (opt_minimization >= 1 && opt_verbosity >= 2) {
+            char *tmp; reportf("Lower bound  = %s\n", tmp = toString(LB_goalvalue)); xfree(tmp); }
 
 	if(opt_minimization != 2 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
             assump_lit = lit_Undef;
             try_lessthan = (best_goalvalue != Int_MAX ? best_goalvalue : UB_goalvalue+1);
 	} else {
-            assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
+            assump_lit = (use_base_assump ? Minisat::lit_Error : 
+                    mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars)));
             try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 	}
-        if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
-            break; // unsat
-        if (assump_lit != lit_Undef) assump_ps.push(assump_lit);
-        if (opt_minimization >= 1 && opt_verbosity >= 2) {
-            char *tmp; reportf("Lower bound  = %s\n", tmp = toString(LB_goalvalue)); xfree(tmp); }
-        convertPbs(false);
       }         
+      if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
+          break; // unsat
+      if (assump_lit != lit_Undef && assump_lit != Minisat::lit_Error) assump_ps.push(assump_lit);
+      convertPbs(false);
     } // END OF LOOP
 
     if (goal == NULL && sat)

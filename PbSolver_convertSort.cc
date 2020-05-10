@@ -339,11 +339,10 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static vec<Int>        Cs;
     static Int lo = Int_MIN, hi = Int_MAX;
     static int lastCost = 0;
-    //static bool negate = true; //false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
     bool lastBaseOK = sizesDiff >= 0;    
-    Int sum = 0, oldlo = lo, oldhi = hi;
+    Int sum = 0;
 
     for (int i = 0; i < c.size; i++) sum += c(i);
         
@@ -354,7 +353,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     bool lastEncodingOK = lastBaseOK && opt_shared_fmls && FEnv::stack.size() > 0;
     Int sumAssigned = 0, sumSetToTrue = 0, sumSkipped = 0;
     extern PbSolver *pb_solver;
-    bool negate = pb_solver->use_base_assump; 
+    bool negate = !pb_solver->bignum_instance;
     int j = 0;
     for (int i = 0; lastEncodingOK && i < ps.size(); i++) {
         Lit   psi_lit = mkLit(index(ps[i]),sign(ps[i]));
